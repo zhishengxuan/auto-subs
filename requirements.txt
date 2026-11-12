@@ -1,0 +1,16 @@
+# 语音识别（本地跑，不需要 API）
+faster-whisper>=1.0.0
+numpy
+
+# 繁转简（--no-simplified 可不装）
+zhconv
+
+# 翻译通道 + 模型/字体下载
+requests
+
+# 找不到系统 ffmpeg 时的兜底（自带一份可执行文件）
+imageio-ffmpeg
+
+# Windows + NVIDIA 显卡加速（Linux/macOS 不用装，系统 CUDA 自带）
+# nvidia-cublas-cu12
+# nvidia-cudnn-cu12>=9

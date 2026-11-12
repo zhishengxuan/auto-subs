@@ -1,0 +1,28 @@
+# 视频 / 字幕产物
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.srt
+*.ass
+*.vtt
+# 但示例字幕要保留
+!examples/*.srt
+
+# 模型与依赖缓存
+models/
+wheels/
+*.bin
+*.part
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# 日志与临时文件
+*.log
+.DS_Store
+Thumbs.db
