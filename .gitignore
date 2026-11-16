@@ -26,3 +26,7 @@ venv/
 *.log
 .DS_Store
 Thumbs.db
+
+# 配音工作目录（模型权重、分段音频、混音中间产物都很大，不要入库）
+dubwork/
+*.wav

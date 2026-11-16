@@ -1,0 +1,25 @@
+# 配音链依赖（auto_dub.py）—— 比字幕链重很多，和 requirements.txt 二选一装也行
+# Python 3.10+；NVIDIA 显卡建议 12GB 显存以上
+#
+# torch / torchaudio 按 CUDA 版本装，例如 RTX 50 系（sm_120）需要 cu128：
+#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128
+# 其余直接：
+#   pip install -r requirements-dub.txt
+
+f5-tts>=1.1
+demucs
+soundfile
+numpy
+imageio-ffmpeg
+
+# 模型权重（--model-dir 指向的目录结构）：
+#   models/
+#   ├── F5TTS_v1_Base/
+#   │   ├── model_1250000.safetensors   （约 1.3GB）
+#   │   └── vocab.txt
+#   └── vocos-mel-24khz/
+#       ├── config.yaml
+#       └── pytorch_model.bin
+# 可从 HuggingFace 下载：
+#   SWivid/F5-TTS 与 charactr/vocos-mel-24khz
+# （国内镜像把 hf.co 换成 hf-mirror.com 即可）

@@ -204,6 +204,42 @@ python merge_episodes.py "D:\video\某剧" --chapters
 
 `auto` 模式先按原样 concat copy，拼完校验总时长；误差超过 2 秒或 0.5% 就自动退回转码重拼。`copy` 和 `normalize` 是强制走某一条路，不校验。
 
+## 英文配音：`auto_dub.py`（换语种，保留原说话人音色）
+
+字幕解决"看"，这个脚本解决"听"：把整条中文对白换成英文，音色还是原来那个人。做法和译制配音一样，参考音频直接取自**这句话在原片里的原声**——谁在说就克隆谁，所以不需要做说话人分离。女主、姐姐、男友各是各的声音。
+
+```
+1. budget    算每句的时间预算，导出超预算台词      （直译英文平均要 1.7 倍时长，必须改短）
+2. merge     改写结果合回时间轴 → en-dub.srt 定稿
+3. gen       逐句切原声当参考 → F5-TTS 合成英文    （断点续跑，每句约 1 秒）
+4. separate  Demucs 拆人声/伴奏，人声丢掉          （可选，想要纯人声就跳过）
+5. mix       配音摆回时间线 + 伴奏垫底混音
+6. render    遮掉原片硬字幕（模糊带）+ 烧英文字幕 + 封装成片
+```
+
+```bash
+# 配音依赖单独装（比字幕链重，见 requirements-dub.txt）
+pip install -r requirements-dub.txt
+
+python auto_dub.py budget --srt-zh zh.srt --srt-en en.srt --workdir dubwork
+#   人工把 dubwork/fix/todo_*.tsv 里的行改短，存成 fix_0.tsv（行号<TAB>英文）
+python auto_dub.py merge  --srt-en en.srt --workdir dubwork --out en-dub.srt
+python auto_dub.py gen    --video in.mp4 --srt-zh zh.srt --srt-en en-dub.srt \
+                          --workdir dubwork --model-dir models
+python auto_dub.py separate --video in.mp4 --workdir dubwork     # 可选
+python auto_dub.py mix    --srt-zh zh.srt --workdir dubwork --accomp-gain 0.8
+python auto_dub.py render --video in.mp4 --workdir dubwork \
+                          --blur-band 1252:100 --burn-srt en-dub.srt --out out.dub.mp4
+```
+
+要点：
+
+- **`budget`/`merge` 不是可选步骤**。英文塞不进中文的时间槽，硬加速就成机关枪；这步是整个流程里效果差别最大的。
+- `gen` 有断点续跑，`--limit 20` 先试听 20 句再跑全量。模型权重放 `--model-dir` 指的目录（结构见 `requirements-dub.txt` 顶部注释），首次运行也可以让 f5-tts 自己下。
+- `--blur-band TOP:HEIGHT` 用模糊盖住原片烧死的硬字幕，`--burn-srt` 在同一位置烧上配音版字幕。两行字幕的剧要把模糊带加高。
+- 伴奏想要就 `--accomp-gain 0.8`，不想要就 0；`separate` 跑一次 32 分钟视频只要几十秒。
+- 编码默认 `hevc_nvenc`，没有 N 卡改成 `--vcodec libx264 --preset medium --cq 23`。
+
 ## 实测性能
 
 单机单次测量，不是基准测试，仅供参考：
@@ -214,6 +250,9 @@ python merge_episodes.py "D:\video\某剧" --chapters
 | 硬字幕全片重编码（hevc_nvenc，cq28） | RTX 5090 | 4 分 12 秒（约 7.8 倍实时） |
 | 软字幕封装（copy，145MB 视频 + 3 轨） | 同机 | 约 20 秒 |
 | 缅甸语翻译 64 条（MyMemory，含 0.35 秒/条限速） | CPU | 约 2 分钟 |
+| 配音生成 1175 句（F5-TTS，逐句克隆） | RTX 5090 | 约 25 分钟（每句约 1.2 秒） |
+| Demucs 人声/伴奏分离（32.5 分钟音频） | RTX 5090 | 46 秒 |
+| 配音成片重编码（模糊带 + 烧字幕，hevc_nvenc cq27） | RTX 5090 | 1 分 47 秒 |
 
 CPU 上跑 large-v3 的具体耗时我没测出结果——32 核机器跑了十几分钟还没过半，就放弃改用 GPU 了。所以「CPU 也能跑」这句只对 small / medium 有把握。
 
@@ -230,6 +269,10 @@ CPU 上跑 large-v3 的具体耗时我没测出结果——32 核机器跑了十
 | [libass](https://github.com/libass/libass) | 字幕渲染 | ISC |
 | [imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg) | 自带一份 ffmpeg 可执行文件 | BSD-2-Clause |
 | [numpy](https://numpy.org/) | 音频数组 | BSD-3-Clause |
+| [F5-TTS](https://github.com/SWivid/F5-TTS) | 零样本音色克隆配音（`auto_dub.py`） | MIT |
+| [Demucs](https://github.com/adefossez/demucs) | 人声/伴奏分离（`auto_dub.py`） | MIT |
+| [vocos-mel-24khz](https://huggingface.co/charactr/vocos-mel-24khz) | F5-TTS 的声码器权重 | MIT |
+| [soundfile](https://github.com/bastibe/python-soundfile) | WAV 读写（绕开 torchaudio 的解码依赖） | BSD-3-Clause |
 | [zhconv](https://github.com/gumblex/zhconv) | 繁转简 | MIT |
 | [requests](https://requests.readthedocs.io/) | 翻译接口请求 | Apache-2.0 |
 | [Noto Sans Myanmar](https://fonts.google.com/noto/specimen/Noto+Sans+Myanmar) | 缅文字体（需自行下载） | OFL-1.1 |
@@ -250,17 +293,24 @@ CPU 上跑 large-v3 的具体耗时我没测出结果——32 核机器跑了十
 5. **同语言的多条字幕轨会被全标成 default**：`-disposition` 只能给第一条匹配的语言设 `default`，否则播放器会同时显示好几条字幕。
 6. **缅文渲染成方框**：libass 要求字体里有对应字形，`--fontsdir` 指到放 Noto Sans Myanmar 的目录即可。
 7. **Windows 智能应用控制会拦截未签名的推理 DLL**：报 `WinError 4551`。这个开关在「Windows 安全中心 → 应用和浏览器控制」里，关掉才能加载 CTranslate2；它关了就很难再开回来，介意的话换台机器跑 `transcribe`，只把 SRT 拷回来做后面的步骤。
+8. **F5-TTS 的 `fix_duration` 是「参考音频 + 生成音频」的总时长**：只传目标时长，参考音频那几秒会从预算里扣掉，英文被挤进 1/3 的时间，语速直接起飞。必须先量参考音频长度再相加。这是配音"说得飞快、音画对不上"的元凶。
+9. **F5-TTS 推理有随机性**：同一组参数，语速忽快忽慢。锁定 `seed`，语速超过 17 字符/秒就换种子重试，仍超标的用 ffmpeg `atempo` 减速（变速不变调）。
+10. **torchaudio 2.x 的 `load` 依赖 torchcodec**：缺 ffmpeg DLL 就 `ImportError`。全部音频走 soundfile，直接把 `torchaudio.load` 整个替换掉。
+11. **Demucs 的 `htdemucs` 只收立体声**：单声道输入会报错，先复制成双声道再进模型。
+12. **ffmpeg 滤镜里 Windows 路径的盘符冒号必须转义**：`ass=filename='C\:/...'`，否则 `C:` 会被当成滤镜参数分隔符；相对路径在某些构建里 fopen 直接失败，用绝对转义路径最稳。
 
 ## 目录
 
 ```
 auto-subs/
 ├── auto_subs.py           主 CLI：transcribe / translate / mux / burn / all
+├── auto_dub.py            换语种配音 CLI：budget / merge / gen / separate / mix / render
 ├── fix_srt.py             ASR 字幕校订（错字 + 断行）
 ├── merge_episodes.py      分集合并（concat + 章节）
 ├── rules.example.json     错字规则表模板
 ├── examples/sample.zh.srt 示例字幕（自己编的对白，可直接跑 fix_srt / translate）
-├── requirements.txt
+├── requirements.txt       字幕链依赖
+├── requirements-dub.txt   配音链依赖（torch / f5-tts / demucs，较重）
 └── LICENSE
 ```
 
@@ -271,6 +321,7 @@ auto-subs/
 - 只在 Windows 11 + Python 3.13.12 + RTX 5090 上实际跑过，Linux / macOS 没验证；
 - 没有单元测试，也没有 CI。手工验证过的只有：各子命令 `--help`、`fix_srt --dry-run`、`mymemory` 通道翻 8 条、`mux` 双轨封装、`burn` 走 NVENC；
 - `all` 子命令只验证了参数解析，没有端到端跑过；
+- `auto_dub.py`：budget / merge / gen / mix / render 六个子命令在一部 32.5 分钟竖屏短剧（1175 句）上端到端跑通过；`separate` 在同一素材上验证过。其他语种只换过缅甸语短语级试听，没跑过整片；
 - 视频编码格式只试过 H.264 和 HEVC 的 mp4。遇到非常规封装（flv、ts、可变帧率）可能需要先自己转一遍。
 
 **功能上的限制**
@@ -289,6 +340,8 @@ auto-subs/
 ## English
 
 A local subtitle pipeline for Chinese video: faster-whisper transcription → rule-based correction of homophone errors → translation (LLM / Google / MyMemory) → soft-sub MKV (stream copy, no re-encode) or hard-sub MP4 (libass + NVENC).
+
+It also includes `auto_dub.py`, a language-replacement dubbing tool: it clones the original speaker's voice per line with F5-TTS (the reference audio is that line's own source audio), removes the original vocals with Demucs, fits the dialogue into each line's time slot via translation-budget compression, and can blur the burned-in subtitles and burn new ones in place.
 
 Nothing is uploaded: audio stays on your machine. 19 languages, sizing tuned for vertical video, and `--fontsdir` for Burmese, Thai and Khmer.
 
